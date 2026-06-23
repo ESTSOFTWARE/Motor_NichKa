@@ -123,6 +123,7 @@ void conectarMQTT() {
 }
 
 void motorTask(void* parameter) {
+  uint32_t steps = 0;
   while (true) {
     xSemaphoreTake(stateMutex, portMAX_DELAY);
     bool activo = motorOn;
@@ -134,7 +135,11 @@ void motorTask(void* parameter) {
       delayMicroseconds(delayMicro);
       digitalWrite(STEP_PIN, LOW);
       delayMicroseconds(delayMicro);
+      // Cede el CPU al IDLE cada 100 pasos para no disparar el Task Watchdog
+      // (delayMicroseconds NO cede; sin esto el core 0 se satura y el ESP32 se reinicia).
+      if (++steps % 100 == 0) vTaskDelay(1);
     } else {
+      steps = 0;
       vTaskDelay(50 / portTICK_PERIOD_MS);
     }
   }
