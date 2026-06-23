@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "esp_task_wdt.h"
 
 #define DIR_PIN    26
 #define STEP_PIN   25
@@ -13,13 +13,10 @@
 #define ENC_DT     19
 #define ENC_SW     5
 
-const char* WIFI_SSID     = "Redmi Note 13";
-const char* WIFI_PASSWORD = "delunoalocho";
-
-const char* MQTT_HOST      = "98.95.129.245";
+const char* MQTT_HOST      = "shark.rmq.cloudamqp.com";
 const int   MQTT_PORT      = 1883;
-const char* MQTT_USER      = "fabricio";
-const char* MQTT_PASSWORD  = "Fabricio.2312";
+const char* MQTT_USER      = "kcugwwbq:kcugwwbq";
+const char* MQTT_PASSWORD  = "LAG1cqP1fWpW-tXs2eQzyyq_fZMigTyj";
 const char* MQTT_CLIENT_ID = "esp32-fermentador-1";
 const int   CIRCUIT_ID     = 1;
 
@@ -39,7 +36,6 @@ PubSubClient mqttClient(wifiClient);
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void conectarMQTT();
 
-// Convierte posición encoder (0-100) a delayMicros (2000-600)
 int encoderToDelay(int enc) {
   return map(enc, ENC_MIN, ENC_MAX, 2000, 600);
 }
@@ -93,10 +89,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void conectarWiFi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("[WiFi] Conectando");
-  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-  Serial.printf("\n[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
+  WiFiManager wm;
+  wm.setConfigPortalTimeout(180);
+  wm.setTitle("Fermentador IoT");
+
+  if (!wm.autoConnect("Fermentador-Setup")) {
+    Serial.println("[WiFi] Timeout, reiniciando...");
+    ESP.restart();
+  }
+
+  Serial.printf("[WiFi] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
 }
 
 void conectarMQTT() {
@@ -120,10 +122,7 @@ void conectarMQTT() {
   if (!mqttClient.connected()) Serial.println("[MQTT] No se pudo conectar.");
 }
 
-// ===================== TASKS =====================
-
 void motorTask(void* parameter) {
-  esp_task_wdt_delete(NULL);
   while (true) {
     xSemaphoreTake(stateMutex, portMAX_DELAY);
     bool activo = motorOn;
@@ -147,12 +146,10 @@ void encoderTask(void* parameter) {
     int clkActual = digitalRead(ENC_CLK);
     if (clkActual != clkAnterior) {
       if (digitalRead(ENC_DT) != clkActual) {
-        // Girando a la derecha → más RPM
         xSemaphoreTake(stateMutex, portMAX_DELAY);
         if (encValue < ENC_MAX) encValue++;
         xSemaphoreGive(stateMutex);
       } else {
-        // Girando a la izquierda → menos RPM
         xSemaphoreTake(stateMutex, portMAX_DELAY);
         if (encValue > ENC_MIN) encValue--;
         xSemaphoreGive(stateMutex);
@@ -182,7 +179,6 @@ void rpmTask(void* parameter) {
 
 void setup() {
   Serial.begin(115200);
-  esp_task_wdt_deinit();
 
   pinMode(STEP_PIN,  OUTPUT);
   pinMode(DIR_PIN,   OUTPUT);
@@ -197,6 +193,7 @@ void setup() {
   pinMode(ENC_SW,  INPUT_PULLUP);
 
   stateMutex = xSemaphoreCreateMutex();
+
   conectarWiFi();
   conectarMQTT();
 
