@@ -174,7 +174,8 @@ void rpmTask(void* parameter) {
     xSemaphoreGive(stateMutex);
     int   delayMicro = encoderToDelay(enc);
     float rpm        = motor ? calcularRPM(delayMicro) : 0.0;
-    publicarSensor("rpm", rpm);
+    // Solo publica rpm con el motor encendido → al detener no consume RabbitMQ.
+    if (motor) publicarSensor("rpm", rpm);
     Serial.printf("[MONITOR] Enc: %d | RPM: %.1f | Motor: %s | Bomba: %s\n",
       enc, rpm, motor ? "ON" : "OFF", bomba ? "ON" : "OFF");
     mqttClient.loop();
